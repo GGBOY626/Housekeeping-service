@@ -1,0 +1,58 @@
+package com.jzo2o.foundations.mapper;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.jzo2o.api.foundations.dto.response.ServeAggregationResDTO;
+import com.jzo2o.foundations.model.domain.Serve;
+import com.jzo2o.foundations.model.dto.response.*;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
+
+/**
+ * <p>
+ * Mapper 接口
+ * </p>
+ *
+ * @author itcast
+ * @since 2023-07-03
+ */
+public interface ServeMapper extends BaseMapper<Serve> {
+    /**
+     * 根据区域id查询服务信息
+     *
+     * @param regionId 区域id
+     * @return 服务信息
+     */
+    List<ServeResDTO> queryListByRegionId(Long regionId);
+    /**
+     * 查询指定区域下上架的服务分类及项目信息
+     *
+     * @param regionId 区域id
+     * @return 服务分类及项目信息
+     */
+    List<ServeCategoryResDTO> findListByRegionId(Long regionId);
+    /**
+     * 查询指定区域下上架且热门的服务项目信息
+     *
+     * @param regionId 区域id
+     * @return 服务项目信息
+     */
+    List<ServeAggregationSimpleResDTO> findServeListByRegionId(Long regionId);
+
+    /**
+     * 查询当前区域下上架服务对应的分类
+     *
+     * @param regionId 区域id
+     * @return 当前区域下上架服务对应的分类
+     */
+    List<ServeAggregationTypeSimpleResDTO> findServeTypeListByRegionId(Long regionId);
+
+    /**
+     * 根据区域和服务类型查询服务列表
+     *
+     * @param regionId   区域id
+     * @param serveTypeId 服务类型id
+     * @return 服务项列表
+     */
+    List<ServeSimpleResDTO> findListByRegionIdAndServeTypeId(@Param("regionId") Long regionId, @Param("serveTypeId") Long serveTypeId);
+}

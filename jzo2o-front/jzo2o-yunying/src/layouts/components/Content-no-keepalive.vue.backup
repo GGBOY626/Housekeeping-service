@@ -1,0 +1,32 @@
+<!-- 完全禁用 keep-alive 的版本（备用方案） -->
+<template>
+  <router-view v-if="!isRefreshing" v-slot="{ Component }">
+    <transition name="fade" mode="out-in">
+      <component :is="Component" :key="route.name" />
+    </transition>
+  </router-view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useTabsRouterStore } from '@/store'
+
+const route = useRoute()
+const tabsRouterStore = useTabsRouterStore()
+
+const isRefreshing = computed(() => tabsRouterStore.refreshing)
+
+console.log('[Content-NO-KEEPALIVE] 已禁用缓存，每次路由变化都会重新挂载组件')
+</script>
+
+<style lang="less" scoped>
+.fade-leave-active,
+.fade-enter-active {
+  transition: opacity @anim-duration-slow @anim-time-fn-easing;
+}
+.fade-enter,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

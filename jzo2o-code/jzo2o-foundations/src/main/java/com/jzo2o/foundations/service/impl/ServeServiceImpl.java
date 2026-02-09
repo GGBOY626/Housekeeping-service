@@ -1,0 +1,231 @@
+package com.jzo2o.foundations.service.impl;
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.jzo2o.common.expcetions.ForbiddenOperationException;
+import com.jzo2o.common.model.PageResult;
+import com.jzo2o.foundations.constants.RedisConstants;
+import com.jzo2o.foundations.mapper.RegionMapper;
+import com.jzo2o.foundations.mapper.ServeItemMapper;
+import com.jzo2o.foundations.mapper.ServeMapper;
+import com.jzo2o.foundations.model.domain.Region;
+import com.jzo2o.foundations.model.domain.Serve;
+import com.jzo2o.foundations.model.domain.ServeItem;
+import com.jzo2o.foundations.model.dto.request.ServePageQueryReqDTO;
+import com.jzo2o.foundations.model.dto.request.ServeUpsertReqDTO;
+import com.jzo2o.foundations.model.dto.response.ServeAggregationSimpleResDTO;
+import com.jzo2o.foundations.model.dto.response.ServeAggregationTypeSimpleResDTO;
+import com.jzo2o.foundations.model.dto.response.ServeCategoryResDTO;
+import com.jzo2o.foundations.model.dto.response.ServeResDTO;
+import com.jzo2o.foundations.model.dto.response.ServeSimpleResDTO;
+import com.jzo2o.foundations.service.IServeService;
+import com.jzo2o.mysql.utils.PageHelperUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * 区域服务管理
+ *
+ * @author itcast
+ * @create 2023/7/17 16:50
+ **/
+@Service
+public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements IServeService {
+    @Autowired
+    private ServeItemMapper serveItemMapper;
+    @Autowired
+    private RegionMapper regionMapper;
+
+    @Override
+    public PageResult<ServeResDTO> findByPage(ServePageQueryReqDTO servePageQueryReqDTO) {
+        return PageHelperUtils.selectPage(servePageQueryReqDTO,
+                () -> baseMapper.queryListByRegionId(servePageQueryReqDTO.getRegionId()));
+    }
+    //这个业务方法中是多次对数据库进行保存操作,务必进行事务处理
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    public void add(List<ServeUpsertReqDTO> dtoList) {
+        //遍历集合 拿到每一个区域服务(服务项目id  区域id 价格)
+        for (ServeUpsertReqDTO dto : dtoList) {
+            //1. 服务项目必须是启用状态的才能添加到区域
+            //根据服务项目id去serve_item查询记录
+            ServeItem serveItem = serveItemMapper.selectById(dto.getServeItemId());
+            if (ObjectUtil.isNull(serveItem) || serveItem.getActiveStatus() != 2) {
+                throw new ForbiddenOperationException("添加失败,服务项目状态有误");
+            }
+
+            //2. 一个服务项目对于一个区域，只能添加一次
+            //根据指定的服务项目id和区域id进行统计,如果统计结果是>0 代表当前项目在当前区域已经存在,就不能再次添加了
+            Integer count = this.lambdaQuery()
+                    .eq(Serve::getServeItemId, dto.getServeItemId())
+                    .eq(Serve::getRegionId, dto.getRegionId())
+                    .count();
+            if (count > 0) {
+                throw new ForbiddenOperationException("添加失败,当前服务项目已经存在");
+            }
+
+            //3.向serve数据表进行保存
+            //Serve serve = new Serve();
+            //serve.setServeItemId(dto.getServeItemId());//serve_item_id
+            //serve.setRegionId(dto.getRegionId());//region_id
+            //serve.setPrice(dto.getPrice());//price
+            Serve serve = BeanUtil.copyProperties(dto, Serve.class);
+            //city_code: 需要根据regionId从region表查询
+            Region region = regionMapper.selectById(dto.getRegionId());
+            if (ObjectUtil.isNotNull(region)){
+                serve.setCityCode(region.getCityCode());
+            }
+            baseMapper.insert(serve);
+        }
+    }
+    @Override
+    public void deleteById(Long id) {
+        //根据主键查询记录, 当状态不为草稿状态不能删除
+        Serve serve = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(serve) || serve.getSaleStatus() != 0){
+            throw new ForbiddenOperationException("删除失败, 当前区域服务不是草稿状态");
+        }
+
+        //根据主键删除
+        baseMapper.deleteById(id);
+    }
+    @Override
+    public void onSale(Long id) {
+        //1) 区域服务当前非上架状态 (如果当前服务是上架状态就应该报错)
+        Serve serve = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(serve) || serve.getSaleStatus() == 2){
+            throw new ForbiddenOperationException("当前服务已经是上架状态了");
+        }
+
+        //2) 服务项目是启用状态
+        //根据服务项目id查询serve_item中active_status
+        ServeItem serveItem = serveItemMapper.selectById(serve.getServeItemId());
+        if (ObjectUtil.isNull(serveItem) || serveItem.getActiveStatus() != 2){
+            throw new ForbiddenOperationException("服务项目未启用");
+        }
+
+        //3) 执行状态字段修改
+        serve.setSaleStatus(2);//上架
+        baseMapper.updateById(serve);
+    }
+    @Override
+    public void offSale(Long id) {
+        //1. 查询区域服务的状态,如果是下架状态,则不能再次下架
+        Serve serve = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(serve) || serve.getSaleStatus() != 2) {
+            throw new ForbiddenOperationException("服务状态异常,无法下架");
+        }
+
+        //2. 更新下架状态
+        serve.setSaleStatus(1);//下架
+        baseMapper.updateById(serve);
+    }
+    @Caching(
+            cacheable = {
+                    //返回数据为空，则缓存空值30分钟，这样可以避免缓存穿透
+                    @Cacheable(value = RedisConstants.CacheName.SERVE_ICON, key ="#regionId" ,
+                            unless ="#result.size() > 0",cacheManager = RedisConstants.CacheManager.THIRTY_MINUTES),
+
+                    //返回值不为空，则永久缓存数据
+                    @Cacheable(value = RedisConstants.CacheName.SERVE_ICON, key ="#regionId" ,
+                            unless ="#result.size() == 0",cacheManager = RedisConstants.CacheManager.FOREVER)
+            }
+    )
+    @Override
+    public List<ServeCategoryResDTO> firstPageServeList(Long regionId) {
+        //1 对区域进行校验
+        Region region = regionMapper.selectById(regionId);
+        if (ObjectUtil.isNull(region) || region.getActiveStatus() != 2) {
+            return Collections.emptyList();
+        }
+
+        //2. 查询指定区域下上架的服务分类及项目信息
+        List<ServeCategoryResDTO> list = baseMapper.findListByRegionId(regionId);
+        if (CollUtil.isEmpty(list)) {
+            return Collections.emptyList();
+        }
+
+        //3. 截取
+        list = CollUtil.sub(list, 0, Math.min(list.size(), 2));//服务类型截取
+        list.forEach(e ->
+                //服务项目截取
+                e.setServeResDTOList(CollUtil.sub(e.getServeResDTOList(), 0, Math.min(e.getServeResDTOList().size(), 4)))
+        );
+        return list;
+    }
+    @Caching(
+            cacheable = {
+                    //返回数据为空，则缓存空值30分钟，这样可以避免缓存穿透
+                    @Cacheable(value = RedisConstants.CacheName.HOT_SERVE, key = "#regionId",
+                            unless = "#result.size() > 0", cacheManager = RedisConstants.CacheManager.THIRTY_MINUTES),
+                    //返回值不为空，则永久缓存数据
+                    @Cacheable(value = RedisConstants.CacheName.HOT_SERVE, key = "#regionId",
+                            unless = "#result.size() == 0", cacheManager = RedisConstants.CacheManager.FOREVER)
+            }
+    )
+    @Override
+    public List<ServeAggregationSimpleResDTO> hotServeList(Long regionId) {
+        //1 对区域进行校验
+        Region region = regionMapper.selectById(regionId);
+        if (ObjectUtil.isNull(region) || region.getActiveStatus() != 2) {
+            return Collections.emptyList();
+        }
+
+        //2 查询指定区域下上架且热门的服务项目信息
+        return baseMapper.findServeListByRegionId(regionId);
+    }
+    @Override
+    public ServeAggregationSimpleResDTO findById(Long id) {
+        //1. 根据服务id去serve表中查询服务信息(内含服务项目id)
+        Serve serve = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(serve)){
+            throw new ForbiddenOperationException("服务不存在");
+        }
+
+        //2. 根据服务项目id去serve_item表中查询服务项目信息
+        ServeItem serveItem = serveItemMapper.selectById(serve.getServeItemId());
+        if (ObjectUtil.isNull(serveItem)){
+            throw new ForbiddenOperationException("服务项目不存在");
+        }
+
+        //3. 将两部分内容组装成返回结果
+        ServeAggregationSimpleResDTO dto = BeanUtil.copyProperties(serve, ServeAggregationSimpleResDTO.class);
+        dto.setServeItemName(serveItem.getName());
+        dto.setServeItemImg(serveItem.getImg());
+        dto.setDetailImg(serveItem.getDetailImg());
+        dto.setUnit(serveItem.getUnit());
+
+        return dto;
+    }
+    @Override
+    public List<ServeAggregationTypeSimpleResDTO> serveTypeList(Long regionId) {
+        //1 对区域进行校验
+        Region region = regionMapper.selectById(regionId);
+        if (ObjectUtil.isNull(region) || region.getActiveStatus() != 2) {
+            return Collections.emptyList();
+        }
+
+        //2 查询当前区域下上架服务对应的分类
+        return baseMapper.findServeTypeListByRegionId(regionId);
+    }
+
+    @Override
+    public List<ServeSimpleResDTO> search(Long regionId, Long serveTypeId) {
+        if (ObjectUtil.isNull(regionId) || ObjectUtil.isNull(serveTypeId)) {
+            return Collections.emptyList();
+        }
+        Region region = regionMapper.selectById(regionId);
+        if (ObjectUtil.isNull(region) || region.getActiveStatus() != 2) {
+            return Collections.emptyList();
+        }
+        return baseMapper.findListByRegionIdAndServeTypeId(regionId, serveTypeId);
+    }
+}
