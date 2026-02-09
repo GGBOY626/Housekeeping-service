@@ -1,0 +1,7 @@
+# build outputs
+unpackage/
+dist/
+*.map
+
+# deps
+node_modules/
