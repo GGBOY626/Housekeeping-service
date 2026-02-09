@@ -1,7 +1,0 @@
-{
-  "navigationStyle": "custom",
-  "navigationBarTitleText": "城市",
-  "usingComponents": {
-    "popup": "../../components/Operate/index"
-  }
-}

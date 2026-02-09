@@ -1,1 +1,0 @@
-<view class="net-fail data-v-44cb6724"><view class="tips data-v-44cb6724">请检查网络</view><view class="btn data-v-44cb6724" bindtap="{{a}}">重新加载</view></view>

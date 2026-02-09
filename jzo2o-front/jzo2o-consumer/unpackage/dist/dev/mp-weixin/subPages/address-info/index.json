@@ -1,8 +1,0 @@
-{
-  "navigationStyle": "custom",
-  "navigationBarTitleText": "编辑地址",
-  "usingComponents": {
-    "btn-footer": "../../components/BtnFooter/index",
-    "select-area": "./components/selectArea"
-  }
-}

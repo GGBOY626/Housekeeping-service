@@ -1,7 +1,0 @@
-{
-  "navigationStyle": "custom",
-  "navigationBarTitleText": "抢单",
-  "usingComponents": {
-    "list": "./components/list"
-  }
-}
