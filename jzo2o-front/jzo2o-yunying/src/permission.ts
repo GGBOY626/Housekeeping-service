@@ -8,6 +8,10 @@ import router from '@/router'
 NProgress.configure({ showSpinner: false })
 
 router.beforeEach(async (to, from, next) => {
+  // 【诊断】点击「新建优惠券」时确认是否进入 guard
+  if (to.path.includes('coupon')) {
+    console.log('[router.beforeEach] to:', to.path, 'name:', to.name, 'from:', from.path)
+  }
   // 进度条开始
   NProgress.start()
 
@@ -69,6 +73,10 @@ router.beforeEach(async (to, from, next) => {
 })
 
 router.afterEach((to) => {
+  // 【诊断】若 beforeEach 有但 afterEach 没有，说明 guard 某分支未 next()
+  if (to.path.includes('coupon')) {
+    console.log('[router.afterEach] to:', to.path, 'name:', to.name)
+  }
   if (to.path === '/login') {
     const userStore = getUserStore()
     const permissionStore = getPermissionStore()

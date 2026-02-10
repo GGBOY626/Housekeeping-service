@@ -1,6 +1,7 @@
 package com.jzo2o.orders.manager.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.OrderItem;
@@ -13,14 +14,23 @@ import com.jzo2o.common.enums.EnableStatusEnum;
 import com.jzo2o.common.expcetions.ForbiddenOperationException;
 import com.jzo2o.common.utils.ObjectUtils;
 import com.jzo2o.orders.base.enums.OrderPayStatusEnum;
+import com.jzo2o.orders.base.enums.OrderRefundStatusEnum;
 import com.jzo2o.orders.base.enums.OrderStatusEnum;
 import com.jzo2o.orders.base.mapper.OrdersMapper;
 import com.jzo2o.orders.base.model.domain.Orders;
+import com.jzo2o.orders.base.model.domain.OrdersCanceled;
+import com.jzo2o.orders.base.model.domain.OrdersRefund;
+import com.jzo2o.orders.base.model.dto.OrderUpdateStatusDTO;
+import com.jzo2o.orders.base.service.IOrdersCommonService;
+import com.jzo2o.orders.base.mapper.OrdersCanceledMapper;
+import com.jzo2o.orders.base.mapper.OrdersRefundMapper;
+import com.jzo2o.orders.manager.model.dto.OrderCancelDTO;
 import com.jzo2o.orders.manager.service.IOrdersManagerService;
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.param.PaymentIntentCreateParams;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +56,18 @@ public class OrdersManagerServiceImpl extends ServiceImpl<OrdersMapper, Orders> 
 
     @Value("${stripe.secret-key:}")
     private String stripeSecretKey;
+
+    @Autowired
+    private IOrdersManagerService owner;
+
+    @Autowired
+    private IOrdersCommonService ordersCommonService;
+
+    @Autowired
+    private OrdersCanceledMapper ordersCanceledMapper;
+
+    @Autowired
+    private OrdersRefundMapper ordersRefundMapper;
 
     @PostConstruct
     public void initStripe() {
@@ -179,8 +201,83 @@ public class OrdersManagerServiceImpl extends ServiceImpl<OrdersMapper, Orders> 
                 .set(Orders::getPayTime, LocalDateTime.now())
                 .set(Orders::getOrdersStatus, OrderStatusEnum.DISPATCHING.getStatus())
                 .set(Orders::getTransactionId, transactionId)
+                .set(Orders::getTradingOrderNo, orderId)
                 .set(Orders::getTradingChannel, "stripe");
         update(update);
+    }
+
+    @Override
+    public void cancel(OrderCancelDTO orderCancelDTO) {
+        Orders orders = getById(orderCancelDTO.getId());
+        if (ObjectUtil.isNull(orders)) {
+            throw new ForbiddenOperationException("订单不存在");
+        }
+        BeanUtil.copyProperties(orders, orderCancelDTO);
+        if (!orders.getUserId().equals(orderCancelDTO.getCurrentUserId())) {
+            throw new ForbiddenOperationException("无权操作该订单");
+        }
+        if (ObjectUtil.equal(orders.getOrdersStatus(), OrderStatusEnum.NO_PAY.getStatus())) {
+            owner.cancelByNoPay(orderCancelDTO);
+        } else if (ObjectUtil.equal(orders.getOrdersStatus(), OrderStatusEnum.DISPATCHING.getStatus())) {
+            owner.cancelByDispatching(orderCancelDTO);
+        } else {
+            throw new ForbiddenOperationException("当前状态订单暂不支持取消");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelByNoPay(OrderCancelDTO orderCancelDTO) {
+        OrderUpdateStatusDTO dto = OrderUpdateStatusDTO.builder()
+                .id(orderCancelDTO.getId())
+                .originStatus(OrderStatusEnum.NO_PAY.getStatus())
+                .targetStatus(OrderStatusEnum.CANCELED.getStatus())
+                .build();
+        Integer i = ordersCommonService.updateStatus(dto);
+        if (i == null || i <= 0) {
+            throw new ForbiddenOperationException("订单取消失败");
+        }
+        OrdersCanceled canceled = new OrdersCanceled();
+        canceled.setId(orderCancelDTO.getId());
+        canceled.setCancellerId(orderCancelDTO.getCurrentUserId());
+        canceled.setCancelerName(orderCancelDTO.getCurrentUserName());
+        canceled.setCancellerType(orderCancelDTO.getCurrentUserType());
+        canceled.setCancelReason(orderCancelDTO.getCancelReason());
+        canceled.setCancelTime(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        canceled.setCreateTime(now);
+        canceled.setUpdateTime(now);
+        ordersCanceledMapper.insert(canceled);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelByDispatching(OrderCancelDTO orderCancelDTO) {
+        OrderUpdateStatusDTO dto = OrderUpdateStatusDTO.builder()
+                .id(orderCancelDTO.getId())
+                .originStatus(OrderStatusEnum.DISPATCHING.getStatus())
+                .targetStatus(OrderStatusEnum.CLOSED.getStatus())
+                .refundStatus(OrderRefundStatusEnum.REFUNDING.getStatus())
+                .build();
+        Integer i = ordersCommonService.updateStatus(dto);
+        if (i == null || i <= 0) {
+            throw new ForbiddenOperationException("订单取消失败");
+        }
+        OrdersCanceled canceled = new OrdersCanceled();
+        canceled.setId(orderCancelDTO.getId());
+        canceled.setCancellerId(orderCancelDTO.getCurrentUserId());
+        canceled.setCancelerName(orderCancelDTO.getCurrentUserName());
+        canceled.setCancellerType(orderCancelDTO.getCurrentUserType());
+        canceled.setCancelReason(orderCancelDTO.getCancelReason());
+        canceled.setCancelTime(LocalDateTime.now());
+        ordersCanceledMapper.insert(canceled);
+
+        OrdersRefund refund = new OrdersRefund();
+        refund.setId(orderCancelDTO.getId());
+        refund.setTradingOrderNo(orderCancelDTO.getTradingOrderNo() != null ? orderCancelDTO.getTradingOrderNo() : orderCancelDTO.getId());
+        refund.setRealPayAmount(orderCancelDTO.getRealPayAmount());
+        refund.setCreateTime(LocalDateTime.now());
+        ordersRefundMapper.insert(refund);
     }
 
 }

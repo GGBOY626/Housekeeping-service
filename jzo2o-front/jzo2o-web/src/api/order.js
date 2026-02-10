@@ -21,3 +21,7 @@ export const createPaymentIntent = (data) =>
 /** 确认支付成功 */
 export const confirmPaid = (data) =>
   request({ url: `${prefix}/confirm-paid`, method: 'post', data })
+
+/** 取消订单（id 建议传字符串避免大数精度丢失） */
+export const cancelOrder = (data) =>
+  request({ url: `${prefix}/cancel`, method: 'put', data })

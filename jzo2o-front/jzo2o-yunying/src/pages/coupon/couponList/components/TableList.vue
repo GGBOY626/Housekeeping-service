@@ -3,7 +3,7 @@
   <div class="baseList bg-wt min-h">
     <div class="tableBoxs">
       <div class="newBox">
-        <button class="bt newBoxbutton" @click="handleBuild" v-if="activeStatus !== 1">新增优惠券</button>
+        <button type="button" class="bt newBoxbutton" @click="handleBuild" v-if="activeStatus !== 1">新增优惠券</button>
       </div>
       <t-config-provider :global-config="globalLocale">
         <t-table
@@ -199,9 +199,9 @@ const onPageChange = (val) => {
     defaultPageSize: val.pageSize
   })
 }
-// 新增优惠券
+// 新增优惠券：使用命名路由确保跳转到新增页
 const handleBuild = () => {
-  router.push('/coupon/couponList/addCoupon')
+  router.push({ name: 'addCoupon' })
 }
 </script>
 <style lang="less" scoped src="../../index.less"></style>

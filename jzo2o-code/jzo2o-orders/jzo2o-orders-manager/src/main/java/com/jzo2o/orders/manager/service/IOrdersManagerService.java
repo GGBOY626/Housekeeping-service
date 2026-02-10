@@ -81,4 +81,25 @@ public interface IOrdersManagerService extends IService<Orders> {
      */
     void evaluationOrder(Long ordersId);
 
+    /**
+     * 取消订单（根据订单状态分发：待支付→已取消，派单中→已关闭+待退款）
+     *
+     * @param orderCancelDTO 取消订单参数
+     */
+    void cancel(OrderCancelDTO orderCancelDTO);
+
+    /**
+     * 取消待支付订单：更新订单状态为已取消，保存取消记录
+     *
+     * @param orderCancelDTO 取消订单对象
+     */
+    void cancelByNoPay(OrderCancelDTO orderCancelDTO);
+
+    /**
+     * 取消派单中订单：更新订单状态为已关闭，保存取消记录，保存待退款记录
+     *
+     * @param orderCancelDTO 取消订单对象
+     */
+    void cancelByDispatching(OrderCancelDTO orderCancelDTO);
+
 }

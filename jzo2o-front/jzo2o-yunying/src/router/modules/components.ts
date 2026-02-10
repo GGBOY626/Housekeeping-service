@@ -324,6 +324,14 @@ const normalRouter = [
         },
         children: [
           {
+            path: '',
+            name: 'couponListIndex',
+            component: () => import('@/pages/coupon/couponList/list.vue'),
+            meta: {
+              title: '优惠券管理'
+            }
+          },
+          {
             path: 'addCoupon',
             name: 'addCoupon',
             component: () => import('@/pages/coupon/couponList/addCoupon.vue'),

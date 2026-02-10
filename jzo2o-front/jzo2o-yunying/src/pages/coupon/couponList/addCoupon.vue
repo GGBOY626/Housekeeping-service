@@ -117,7 +117,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -195,11 +195,11 @@ const onSubmit = (result: ValidateResultContext<FormData>) => {
 // 更新调度配置数据
 const updateData = async (val) => {
   await saveCoupon(val)
-    .then((res) => {
+    .then(async (res) => {
       if (res.code === 200) {
         if (!id) {
           MessagePlugin.success('创建成功')
-          router.push('/coupon/couponList')
+          await router.replace('/coupon/couponList')
         } else {
           MessagePlugin.success('更新成功')
           fetchData(id)
@@ -246,19 +246,21 @@ const rules = {
 const handleBack = () => {
   router.push('/coupon/couponList')
 }
-// 生命周期
-onMounted(() => {
-  if (id) {
-    fetchData(id)
-  }
-})
-// 刷新页面
+
+// 路由变化时初始化：进入编辑页拉详情，避免仅依赖 onMounted 导致子路由首次进入不触发
+watch(
+  () => route.fullPath,
+  () => {
+    const pid = route.params.id
+    if (pid) fetchData(pid)
+  },
+  { immediate: true }
+)
+// 查询参数变化时刷新编辑数据
 watch(
   () => route.query,
   () => {
-    if (id) {
-      fetchData(id)
-    }
+    if (route.params.id) fetchData(route.params.id)
   }
 )
 </script>

@@ -8,6 +8,7 @@
         <outputRelativeToContentRoot value="true" />
         <module name="jzo2o-rabbitmq" />
         <module name="jzo2o-shardingsphere-jdbc" />
+        <module name="jzo2o-market" />
         <module name="jzo2o-redis" />
         <module name="jzo2o-common" />
         <module name="jzo2o-sentinel" />
@@ -41,6 +42,7 @@
       <module name="jzo2o-foundations" options="-parameters" />
       <module name="jzo2o-gateway" options="-parameters" />
       <module name="jzo2o-knife4j-web" options="-parameters" />
+      <module name="jzo2o-market" options="-parameters" />
       <module name="jzo2o-mvc" options="-parameters" />
       <module name="jzo2o-mysql" options="-parameters" />
       <module name="jzo2o-orders-base" options="-parameters" />

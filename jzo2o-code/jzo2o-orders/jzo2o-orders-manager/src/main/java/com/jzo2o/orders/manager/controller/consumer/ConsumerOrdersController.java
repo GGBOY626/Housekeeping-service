@@ -2,7 +2,7 @@ package com.jzo2o.orders.manager.controller.consumer;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.jzo2o.api.market.dto.response.AvailableCouponsResDTO;
-import com.jzo2o.api.orders.dto.request.OrderCancelReqDTO;
+import com.jzo2o.orders.manager.model.dto.request.CancelOrderReqDTO;
 import com.jzo2o.api.orders.dto.response.OrderResDTO;
 import com.jzo2o.api.orders.dto.response.OrderSimpleResDTO;
 import com.jzo2o.common.constants.ErrorInfo;
@@ -26,6 +26,7 @@ import io.swagger.annotations.ApiOperation;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -95,6 +96,20 @@ public class ConsumerOrdersController {
         Long orderId = parseOrderId(req.getOrderId());
         ordersManagerService.markPaySuccess(
                 orderId, UserContext.currentUserId(), req.getPaymentIntentId());
+    }
+
+    @ApiOperation("取消订单")
+    @PutMapping("/cancel")
+    public void cancel(@RequestBody CancelOrderReqDTO req) {
+        Long orderId = parseOrderId(req.getOrderId());
+        CurrentUserInfo currentUserInfo = UserContext.currentUser();
+        OrderCancelDTO orderCancelDTO = new OrderCancelDTO();
+        orderCancelDTO.setId(orderId);
+        orderCancelDTO.setCancelReason(req.getCancelReason());
+        orderCancelDTO.setCurrentUserId(currentUserInfo.getId());
+        orderCancelDTO.setCurrentUserName(currentUserInfo.getName());
+        orderCancelDTO.setCurrentUserType(currentUserInfo.getUserType());
+        ordersManagerService.cancel(orderCancelDTO);
     }
 
     private static Long parseOrderId(Object orderId) {

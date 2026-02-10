@@ -39,8 +39,9 @@
           <span class="value">{{ formatTime(detail.payTime) }}</span>
         </div>
       </div>
-      <div class="foot-actions" v-if="detail.ordersStatus === 0 && detail.payStatus !== 4">
-        <button class="btn primary" @click="$router.push(`/order/pay?id=${detail.id}&amount=${detail.realPayAmount}`)">去支付</button>
+      <div class="foot-actions" v-if="canPay || canCancel">
+        <button v-if="canCancel" class="btn secondary" @click="handleCancel">取消订单</button>
+        <button v-if="canPay" class="btn primary" @click="$router.push(`/order/pay?id=${detail.id}&amount=${detail.realPayAmount}`)">去支付</button>
       </div>
     </div>
     <div v-else class="empty">订单不存在</div>
@@ -49,12 +50,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { getOrderDetail } from '@/api/order'
+import { useRoute, useRouter } from 'vue-router'
+import { getOrderDetail, cancelOrder } from '@/api/order'
 
 const route = useRoute()
+const router = useRouter()
 const detail = ref(null)
 const loading = ref(true)
+const canceling = ref(false)
 
 const orderStatusText = computed(() => {
   if (!detail.value) return ''
@@ -79,6 +82,35 @@ const statusClass = computed(() => {
   if (s === 600 || s === 700) return 'status-cancel'
   return ''
 })
+
+const canPay = computed(() => {
+  return detail.value && detail.value.ordersStatus === 0 && detail.value.payStatus !== 4
+})
+
+const canCancel = computed(() => {
+  if (!detail.value) return false
+  const s = detail.value.ordersStatus
+  return s === 0 || s === 100
+})
+
+async function handleCancel() {
+  if (!detail.value || canceling.value) return
+  if (!confirm('确定要取消该订单吗？')) return
+  canceling.value = true
+  try {
+    await cancelOrder({
+      orderId: String(detail.value.id),
+      cancelReason: '用户取消'
+    })
+    alert('取消成功')
+    const res = await getOrderDetail(route.params.id)
+    detail.value = res?.data ?? res
+  } catch (e) {
+    alert(e.response?.data?.msg || e.message || '取消失败')
+  } finally {
+    canceling.value = false
+  }
+}
 
 function formatTime(t) {
   if (!t) return ''
@@ -191,14 +223,31 @@ onMounted(async () => {
   border-top: 1px solid #eee;
   box-sizing: border-box;
 }
-.btn.primary {
-  width: 100%;
+.foot-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.btn {
+  flex: 1;
+  max-width: 160px;
   height: 44px;
   border: none;
   border-radius: 22px;
-  background: var(--essential-color-red);
-  color: #fff;
   font-size: 16px;
   cursor: pointer;
+}
+.btn.primary {
+  background: var(--essential-color-red);
+  color: #fff;
+}
+.btn.secondary {
+  background: #fff;
+  color: #333;
+  border: 1px solid #ddd;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
