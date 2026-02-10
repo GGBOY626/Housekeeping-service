@@ -3,6 +3,9 @@ package com.jzo2o.foundations.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
+
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.jzo2o.common.expcetions.ForbiddenOperationException;
 import com.jzo2o.common.model.PageResult;
@@ -10,9 +13,13 @@ import com.jzo2o.foundations.constants.RedisConstants;
 import com.jzo2o.foundations.mapper.RegionMapper;
 import com.jzo2o.foundations.mapper.ServeItemMapper;
 import com.jzo2o.foundations.mapper.ServeMapper;
+import com.jzo2o.foundations.mapper.ServeSyncMapper;
+import com.jzo2o.foundations.mapper.ServeTypeMapper;
 import com.jzo2o.foundations.model.domain.Region;
 import com.jzo2o.foundations.model.domain.Serve;
 import com.jzo2o.foundations.model.domain.ServeItem;
+import com.jzo2o.foundations.model.domain.ServeSync;
+import com.jzo2o.foundations.model.domain.ServeType;
 import com.jzo2o.foundations.model.dto.request.ServePageQueryReqDTO;
 import com.jzo2o.foundations.model.dto.request.ServeUpsertReqDTO;
 import com.jzo2o.foundations.model.dto.response.ServeAggregationSimpleResDTO;
@@ -22,14 +29,24 @@ import com.jzo2o.foundations.model.dto.response.ServeResDTO;
 import com.jzo2o.foundations.model.dto.response.ServeSimpleResDTO;
 import com.jzo2o.foundations.service.IServeService;
 import com.jzo2o.mysql.utils.PageHelperUtils;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.sort.SortOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 区域服务管理
@@ -43,6 +60,12 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
     private ServeItemMapper serveItemMapper;
     @Autowired
     private RegionMapper regionMapper;
+    @Autowired
+    private ServeTypeMapper serveTypeMapper;
+    @Autowired
+    private ServeSyncMapper serveSyncMapper;
+    @Autowired
+    private RestHighLevelClient client;
 
     @Override
     public PageResult<ServeResDTO> findByPage(ServePageQueryReqDTO servePageQueryReqDTO) {
@@ -97,6 +120,7 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
         //根据主键删除
         baseMapper.deleteById(id);
     }
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public void onSale(Long id) {
         //1) 区域服务当前非上架状态 (如果当前服务是上架状态就应该报错)
@@ -115,7 +139,11 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
         //3) 执行状态字段修改
         serve.setSaleStatus(2);//上架
         baseMapper.updateById(serve);
+
+        //4) 添加同步表数据
+        addServeSync(id);
     }
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public void offSale(Long id) {
         //1. 查询区域服务的状态,如果是下架状态,则不能再次下架
@@ -127,6 +155,9 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
         //2. 更新下架状态
         serve.setSaleStatus(1);//下架
         baseMapper.updateById(serve);
+
+        //3. 删除同步表数据
+        serveSyncMapper.deleteById(id);
     }
     @Caching(
             cacheable = {
@@ -227,5 +258,89 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
             return Collections.emptyList();
         }
         return baseMapper.findListByRegionIdAndServeTypeId(regionId, serveTypeId);
+    }
+
+
+    @Override
+    public List<ServeSimpleResDTO> search(String cityCode, String keyword, Long serveTypeId, Long regionId) {
+        // 未传 cityCode 时，用 regionId 解析
+        if (StrUtil.isBlank(cityCode) && regionId != null) {
+            Region region = regionMapper.selectById(regionId);
+            if (region != null) {
+                cityCode = region.getCityCode();
+            }
+        }
+        if (StrUtil.isBlank(cityCode)) {
+            return List.of();
+        }
+
+        //1. 创建请求对象
+        SearchRequest request = new SearchRequest("serve_aggregation");
+
+        //2. 封装请求参数
+        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
+        //城市编码
+        boolQuery.must(QueryBuilders.termQuery("city_code", cityCode));
+        //服务类型id
+        if (serveTypeId != null) {
+            boolQuery.must(QueryBuilders.termQuery("serve_type_id", serveTypeId));
+        }
+        //关键词
+        if (StrUtil.isNotEmpty(keyword)) {
+            boolQuery.must(QueryBuilders.multiMatchQuery(keyword, "serve_item_name", "serve_type_name"));
+        }
+        request.source().query(boolQuery);//查询
+        request.source().sort("serve_item_sort_num", SortOrder.ASC);//排序
+
+        //3. 执行请求
+        SearchResponse response = null;
+        try {
+            response = client.search(request, RequestOptions.DEFAULT);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        //4. 处理返回结果   List<ServeSimpleResDTO>
+        if (response.getHits().getTotalHits().value == 0) {
+            return List.of();
+        }
+        return Arrays.stream(response.getHits().getHits())
+                .map(e -> JSONUtil.toBean(e.getSourceAsString(), ServeSimpleResDTO.class))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 新增服务同步数据
+     *
+     * @param serveId 服务id
+     */
+    private void addServeSync(Long serveId) {
+        Serve serve = baseMapper.selectById(serveId);
+        Region region = regionMapper.selectById(serve.getRegionId());
+        ServeItem serveItem = serveItemMapper.selectById(serve.getServeItemId());
+        ServeType serveType = serveTypeMapper.selectById(serveItem.getServeTypeId());
+
+        ServeSync serveSync = new ServeSync();
+        serveSync.setServeTypeId(serveType.getId());
+        serveSync.setServeTypeName(serveType.getName());
+        serveSync.setServeTypeIcon(serveType.getServeTypeIcon());
+        serveSync.setServeTypeImg(serveType.getImg());
+        serveSync.setServeTypeSortNum(serveType.getSortNum());
+
+        serveSync.setServeItemId(serveItem.getId());
+        serveSync.setServeItemIcon(serveItem.getServeItemIcon());
+        serveSync.setServeItemName(serveItem.getName());
+        serveSync.setServeItemImg(serveItem.getImg());
+        serveSync.setServeItemSortNum(serveItem.getSortNum());
+        serveSync.setUnit(serveItem.getUnit());
+        serveSync.setDetailImg(serveItem.getDetailImg());
+
+        serveSync.setPrice(serve.getPrice());
+        serveSync.setCityCode(region.getCityCode());
+        serveSync.setId(serve.getId());
+        serveSync.setIsHot(serve.getIsHot());
+        serveSync.setHotTimeStamp(serve.getHotTimeStamp());
+
+        serveSyncMapper.insert(serveSync);
     }
 }

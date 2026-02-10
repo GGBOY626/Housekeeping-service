@@ -8,7 +8,7 @@ export const getServeCategory = (params) =>
   request({ url: '/foundations/customer/serve/serveTypeList', method: 'get', params })
 
 export const getServeList = (params) =>
-  request({ url: '/foundations/customer/serve/search', method: 'get', params })
+  request({ url: '/foundations/customer/serve/list', method: 'get', params })
 
 export const getServeById = (id) =>
   request({ url: `/foundations/customer/serve/${id}`, method: 'get' })

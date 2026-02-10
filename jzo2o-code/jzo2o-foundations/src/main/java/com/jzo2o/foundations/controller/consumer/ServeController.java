@@ -33,10 +33,15 @@ public class ServeController {
     public List<ServeAggregationSimpleResDTO> hotServeList(Long regionId) {
         return serveService.hotServeList(regionId);
     }
-    @GetMapping("/search")
-    @ApiOperation("根据区域和服务类型搜索服务列表")
-    public List<ServeSimpleResDTO> search(Long regionId, Long serveTypeId) {
+    @GetMapping("/list")
+    @ApiOperation("根据区域和服务类型查询服务列表")
+    public List<ServeSimpleResDTO> list(Long regionId, Long serveTypeId) {
         return serveService.search(regionId, serveTypeId);
+    }
+    @GetMapping("/search")
+    @ApiOperation("服务搜索（支持 cityCode 或 regionId，传 regionId 时会自动解析 cityCode）")
+    public List<ServeSimpleResDTO> search(String cityCode, String keyword, Long serveTypeId, Long regionId) {
+        return serveService.search(cityCode, keyword, serveTypeId, regionId);
     }
     @GetMapping("/{id}")
     @ApiOperation("查询服务详情")

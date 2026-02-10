@@ -11,7 +11,7 @@ export const getServeCategory = (params) => {
 // 查询服务列表
 export const getServeList = (params) => {
   return request({
-    url: '/foundations/customer/serve/search',
+    url: '/foundations/customer/serve/list',
     method: 'get',
     params
   })

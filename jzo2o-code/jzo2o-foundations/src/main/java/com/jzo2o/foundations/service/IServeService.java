@@ -97,4 +97,14 @@ public interface IServeService extends IService<Serve> {
      * @return 服务项列表
      */
     List<ServeSimpleResDTO> search(Long regionId, Long serveTypeId);
+    /**
+     * 服务搜索（ES，支持按 cityCode 或 regionId；传 regionId 时会自动解析 cityCode）
+     *
+     * @param cityCode    城市编码（可与 regionId 二选一）
+     * @param keyword     关键词
+     * @param serveTypeId 服务类型id
+     * @param regionId    区域id（未传 cityCode 时用此解析 cityCode）
+     * @return 服务项目信息
+     */
+    List<ServeSimpleResDTO> search(String cityCode, String keyword, Long serveTypeId, Long regionId);
 }
