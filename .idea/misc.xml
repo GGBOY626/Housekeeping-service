@@ -19,6 +19,7 @@
         <option value="$PROJECT_DIR$/jzo2o-framework/jzo2o-parent/pom.xml" />
         <option value="$PROJECT_DIR$/jzo2o-code/jzo2o-publics/pom.xml" />
         <option value="$PROJECT_DIR$/jzo2o-code/jzo2o-customer/pom.xml" />
+        <option value="$PROJECT_DIR$/jzo2o-code/jzo2o-orders/pom.xml" />
       </list>
     </option>
   </component>

@@ -99,4 +99,32 @@
           and si.serve_type_id = #{serveTypeId}
         order by si.sort_num asc
     </select>
+
+    <select id="findServeDetailById" resultType="com.jzo2o.api.foundations.dto.response.ServeAggregationResDTO">
+        SELECT
+            s.id,
+            s.city_code AS cityCode,
+            s.price,
+            s.is_hot AS isHot,
+            s.hot_time_stamp AS hotTimeStamp,
+            s.sale_status AS saleStatus,
+            si.id AS serveItemId,
+            si.name AS serveItemName,
+            si.img AS serveItemImg,
+            si.detail_img AS detailImg,
+            si.serve_item_icon AS serveItemIcon,
+            si.unit,
+            si.sort_num AS serveItemSortNum,
+            si.serve_type_id AS serveTypeId,
+            st.name AS serveTypeName,
+            st.img AS serveTypeImg,
+            st.serve_type_icon AS serveTypeIcon,
+            st.sort_num AS serveTypeSortNum
+        FROM
+            serve s
+                INNER JOIN serve_item si ON si.id = s.serve_item_id
+                INNER JOIN serve_type st ON st.id = si.serve_type_id
+        WHERE
+            s.id = #{id}
+    </select>
 </mapper>

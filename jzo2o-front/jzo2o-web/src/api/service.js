@@ -12,3 +12,7 @@ export const getServeList = (params) =>
 
 export const getServeById = (id) =>
   request({ url: `/foundations/customer/serve/${id}`, method: 'get' })
+
+/** 下单（立即预约） */
+export const placeOrder = (data) =>
+  request({ url: '/orders-manager/consumer/orders/place', method: 'post', data })

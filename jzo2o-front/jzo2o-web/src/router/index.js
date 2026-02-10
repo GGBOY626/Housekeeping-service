@@ -10,7 +10,11 @@ const routes = [
   { path: '/search', name: 'Search', component: () => import('@/pages/Search.vue') },
   { path: '/my', name: 'My', component: () => import('@/pages/My.vue') },
   { path: '/address', name: 'Address', component: () => import('@/pages/Address.vue') },
-  { path: '/address/form', name: 'AddressForm', component: () => import('@/pages/AddressForm.vue') }
+  { path: '/address/form', name: 'AddressForm', component: () => import('@/pages/AddressForm.vue') },
+  { path: '/order/pay', name: 'OrderPay', component: () => import('@/pages/OrderPay.vue') },
+  { path: '/order/success', name: 'OrderSuccess', component: () => import('@/pages/OrderSuccess.vue') },
+  { path: '/order/list', name: 'OrderList', component: () => import('@/pages/OrderList.vue') },
+  { path: '/order/detail/:id', name: 'OrderDetail', component: () => import('@/pages/OrderDetail.vue') }
 ]
 
 const router = createRouter({

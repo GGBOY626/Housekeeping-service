@@ -82,8 +82,8 @@ const toOrders = (status) => {
     router.push('/login')
     return
   }
-  // 订单列表页（待实现）
-  alert('订单列表功能开发中')
+  const query = status !== '' && status !== undefined ? { status } : {}
+  router.push({ path: '/order/list', query })
 }
 
 const toAddress = () => {

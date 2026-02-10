@@ -22,6 +22,7 @@ import com.jzo2o.foundations.model.domain.ServeSync;
 import com.jzo2o.foundations.model.domain.ServeType;
 import com.jzo2o.foundations.model.dto.request.ServePageQueryReqDTO;
 import com.jzo2o.foundations.model.dto.request.ServeUpsertReqDTO;
+import com.jzo2o.api.foundations.dto.response.ServeAggregationResDTO;
 import com.jzo2o.foundations.model.dto.response.ServeAggregationSimpleResDTO;
 import com.jzo2o.foundations.model.dto.response.ServeAggregationTypeSimpleResDTO;
 import com.jzo2o.foundations.model.dto.response.ServeCategoryResDTO;
@@ -236,6 +237,12 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
 
         return dto;
     }
+
+    @Override
+    public ServeAggregationResDTO findServeDetailById(Long id) {
+        return baseMapper.findServeDetailById(id);
+    }
+
     @Override
     public List<ServeAggregationTypeSimpleResDTO> serveTypeList(Long regionId) {
         //1 对区域进行校验

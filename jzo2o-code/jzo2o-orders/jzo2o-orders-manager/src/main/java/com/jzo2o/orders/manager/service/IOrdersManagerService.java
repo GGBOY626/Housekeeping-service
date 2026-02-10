@@ -55,6 +55,25 @@ public interface IOrdersManagerService extends IService<Orders> {
      * @return 订单详情
      */
     OrderResDTO getDetail(Long id);
+
+    /**
+     * 创建 Stripe 支付意图
+     *
+     * @param orderId 订单id
+     * @param userId  当前用户id
+     * @param amount  金额（元）
+     * @return clientSecret
+     */
+    String createPaymentIntent(Long orderId, Long userId, java.math.BigDecimal amount);
+
+    /**
+     * 支付成功回调：更新订单支付状态
+     *
+     * @param orderId          订单id
+     * @param userId           当前用户id
+     * @param transactionId    第三方交易号（如 Stripe payment_intent id）
+     */
+    void markPaySuccess(Long orderId, Long userId, String transactionId);
     /**
      * 订单评价
      *

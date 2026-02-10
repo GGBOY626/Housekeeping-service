@@ -42,6 +42,9 @@ spring:
             refresh: false
           - data-id: shared-mysql.yaml # mysql配置
             refresh: false
+          - data-id: shared-stripe.yaml
+            refresh: false
+
 #          - data-id: shared-spring-seata.yaml # seata
 #            refresh: false
 
@@ -63,8 +66,9 @@ swagger:
   version: v1.0
 feign:
   enable: true
+# Seata 分布式事务：未接入 Seata Server 或未使用 shared-spring-seata 时请关闭，避免日志报错 service.vgroupMapping.default_tx_group
 seata:
-  enabled: true
+  enabled: false
 
 
 

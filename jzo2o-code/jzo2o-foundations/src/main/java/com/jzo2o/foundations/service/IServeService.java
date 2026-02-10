@@ -1,6 +1,7 @@
 package com.jzo2o.foundations.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.jzo2o.api.foundations.dto.response.ServeAggregationResDTO;
 import com.jzo2o.api.foundations.dto.response.RegionSimpleResDTO;
 import com.jzo2o.common.model.PageResult;
 import com.jzo2o.foundations.model.domain.Region;
@@ -80,6 +81,14 @@ public interface IServeService extends IService<Serve> {
      * @return 服务详情信息
      */
     ServeAggregationSimpleResDTO findById(Long id);
+
+    /**
+     * 根据ID查询服务详情（内部/下单用，含 saleStatus 等）
+     *
+     * @param id 服务id
+     * @return 服务详情
+     */
+    ServeAggregationResDTO findServeDetailById(Long id);
 
     /**
      * 查询当前区域下上架服务对应的分类

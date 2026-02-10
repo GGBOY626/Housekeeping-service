@@ -70,13 +70,45 @@
                   </div>
                   <span class="form-arrow">›</span>
                 </div>
-                <div class="form-row">
+                <div class="form-row" @click.stop="showTimePicker = true">
                   <div class="form-left">
                     <img src="/static/smsj@2x.png" class="form-icon" alt="" />
                     <span class="form-placeholder">请选择上门时间</span>
                   </div>
-                  <span class="form-value">{{ toDoorTimeLabel || '请选择' }}</span>
+                  <span class="form-value" :class="{ placeholder: !toDoorTimeLabel }">{{ toDoorTimeLabel || '请选择' }}</span>
                   <span class="form-arrow">›</span>
+                </div>
+                <!-- 自定义上门时间选择弹层 -->
+                <div v-if="showTimePicker" class="time-picker-mask" @click.self="showTimePicker = false">
+                  <div class="time-picker-panel">
+                    <div class="time-picker-header">
+                      <span @click="showTimePicker = false">取消</span>
+                      <span>选择上门时间</span>
+                      <span class="confirm" @click="confirmTime">确定</span>
+                    </div>
+                    <div class="time-picker-body">
+                      <div class="time-picker-date">
+                        <div
+                          v-for="(item, idx) in pickerDateList"
+                          :key="idx"
+                          :class="['date-item', { active: selectedDateIdx === idx }]"
+                          @click="selectedDateIdx = idx"
+                        >
+                          {{ item.label }}
+                        </div>
+                      </div>
+                      <div class="time-picker-slots">
+                        <div
+                          v-for="(slot, idx) in pickerTimeSlots"
+                          :key="idx"
+                          :class="['slot-item', { active: selectedTimeIdx === idx }]"
+                          @click="selectedTimeIdx = idx"
+                        >
+                          {{ slot }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="form-title">优惠券信息</div>
                 <div class="form-row">
@@ -110,7 +142,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getServeById } from '@/api/service'
+import { getServeById, placeOrder } from '@/api/service'
 import { getDefaultAddress, getAddressBookDetail } from '@/api/address'
 import { UNIT } from '@/utils/constants'
 
@@ -121,6 +153,35 @@ const num = ref(1)
 const showBookModal = ref(false)
 const addressData = ref(null)
 const toDoorTimeLabel = ref('')
+const serveStartTime = ref(null)
+const showTimePicker = ref(false)
+const selectedDateIdx = ref(0)
+const selectedTimeIdx = ref(0)
+// 近7天日期
+const pickerDateList = computed(() => {
+  const list = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date()
+    d.setDate(d.getDate() + i)
+    const month = d.getMonth() + 1
+    const day = d.getDate()
+    const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
+    list.push({
+      value: `${d.getFullYear()}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      label: i === 0 ? '今天' : i === 1 ? '明天' : `${month}/${day} 周${week}`
+    })
+  }
+  return list
+})
+// 时段：08:00 - 20:00 每半小时
+const pickerTimeSlots = computed(() => {
+  const slots = []
+  for (let h = 8; h <= 20; h++) {
+    slots.push(`${String(h).padStart(2, '0')}:00`)
+    if (h < 20) slots.push(`${String(h).padStart(2, '0')}:30`)
+  }
+  return slots
+})
 
 const unitLabel = computed(() => {
   if (!detail.value?.unit) return '次'
@@ -143,6 +204,15 @@ const totalPrice = computed(() => {
 const canSubmit = computed(() => {
   return addressData.value?.id && toDoorTimeLabel.value
 })
+
+const confirmTime = () => {
+  const dateStr = pickerDateList.value[selectedDateIdx.value]?.value
+  const timeStr = pickerTimeSlots.value[selectedTimeIdx.value]
+  if (!dateStr || !timeStr) return
+  toDoorTimeLabel.value = `${dateStr} ${timeStr}`
+  serveStartTime.value = `${dateStr} ${timeStr}:00`
+  showTimePicker.value = false
+}
 
 onMounted(async () => {
   const id = route.params.id
@@ -185,10 +255,27 @@ const toAddressSelect = () => {
   router.push(`/address?fromDetail=true&detailId=${route.params.id}`)
 }
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
   if (!canSubmit.value) return
-  // 提交预约（待实现）
-  alert('提交预约功能开发中')
+  try {
+    // 服务 id 可能超过 JS 安全整数，用字符串传参避免精度丢失，后端 Long 可正常反序列化
+    const res = await placeOrder({
+      serveId: route.params.id,
+      addressBookId: addressData.value.id,
+      serveStartTime: serveStartTime.value,
+      purNum: num.value
+    })
+    const orderId = res?.data?.id ?? res?.id
+    if (orderId) {
+      closeModal()
+      router.push(`/order/pay?id=${orderId}&amount=${totalPrice.value}`)
+    } else {
+      alert(res?.msg || '下单失败')
+    }
+  } catch (e) {
+    console.error(e)
+    alert(e?.response?.data?.msg || e?.message || '下单失败')
+  }
 }
 </script>
 
@@ -468,8 +555,89 @@ const handleSubmit = () => {
   color: #151515;
   margin-right: 4px;
 }
-.form-value.gray {
+.form-value.gray,
+.form-value.placeholder {
   color: #888;
+}
+/* 上门时间选择弹层 */
+.time-picker-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.time-picker-panel {
+  width: 100%;
+  max-width: 375px;
+  max-height: 60vh;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+}
+.time-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 15px;
+}
+.time-picker-header .confirm {
+  color: var(--essential-color-red);
+  cursor: pointer;
+}
+.time-picker-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.time-picker-date {
+  width: 110px;
+  border-right: 1px solid #f0f0f0;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.date-item {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  text-align: center;
+  cursor: pointer;
+}
+.date-item.active {
+  color: var(--essential-color-red);
+  font-weight: 500;
+}
+.time-picker-slots {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-content: flex-start;
+}
+.slot-item {
+  width: calc(50% - 4px);
+  padding: 10px;
+  font-size: 14px;
+  color: #333;
+  text-align: center;
+  border-radius: 8px;
+  background: #f5f5f5;
+  cursor: pointer;
+}
+.slot-item.active {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--essential-color-red);
+  font-weight: 500;
 }
 .form-arrow {
   font-size: 18px;

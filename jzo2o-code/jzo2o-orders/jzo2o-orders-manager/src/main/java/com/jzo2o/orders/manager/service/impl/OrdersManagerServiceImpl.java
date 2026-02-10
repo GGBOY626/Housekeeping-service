@@ -1,8 +1,8 @@
 package com.jzo2o.orders.manager.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.OrderItem;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -10,15 +10,24 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.jzo2o.api.orders.dto.response.OrderResDTO;
 import com.jzo2o.api.orders.dto.response.OrderSimpleResDTO;
 import com.jzo2o.common.enums.EnableStatusEnum;
+import com.jzo2o.common.expcetions.ForbiddenOperationException;
 import com.jzo2o.common.utils.ObjectUtils;
+import com.jzo2o.orders.base.enums.OrderPayStatusEnum;
+import com.jzo2o.orders.base.enums.OrderStatusEnum;
 import com.jzo2o.orders.base.mapper.OrdersMapper;
 import com.jzo2o.orders.base.model.domain.Orders;
-import com.jzo2o.orders.base.model.dto.OrderSnapshotDTO;
 import com.jzo2o.orders.manager.service.IOrdersManagerService;
+import com.stripe.Stripe;
+import com.stripe.exception.StripeException;
+import com.stripe.param.PaymentIntentCreateParams;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.annotation.PostConstruct;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static com.jzo2o.orders.base.constants.FieldConstants.SORT_BY;
@@ -34,6 +43,16 @@ import static com.jzo2o.orders.base.constants.FieldConstants.SORT_BY;
 @Slf4j
 @Service
 public class OrdersManagerServiceImpl extends ServiceImpl<OrdersMapper, Orders> implements IOrdersManagerService {
+
+    @Value("${stripe.secret-key:}")
+    private String stripeSecretKey;
+
+    @PostConstruct
+    public void initStripe() {
+        if (stripeSecretKey != null && !stripeSecretKey.isEmpty()) {
+            Stripe.apiKey = stripeSecretKey;
+        }
+    }
 
     @Override
     public List<Orders> batchQuery(List<Long> ids) {
@@ -62,7 +81,7 @@ public class OrdersManagerServiceImpl extends ServiceImpl<OrdersMapper, Orders> 
                 .lt(ObjectUtils.isNotNull(sortBy), Orders::getSortBy, sortBy)
                 .eq(Orders::getUserId, currentUserId)
                 .eq(Orders::getDisplay, EnableStatusEnum.ENABLE.getStatus());
-        Page<Orders> queryPage = new Page<>();
+        Page<Orders> queryPage = new Page<>(1, 20);
         queryPage.addOrder(OrderItem.desc(SORT_BY));
         queryPage.setSearchCount(false);
 
@@ -104,6 +123,64 @@ public class OrdersManagerServiceImpl extends ServiceImpl<OrdersMapper, Orders> 
 //
 //        //订单状态变更
 //        orderStateMachine.changeStatus(orders.getUserId(), orders.getId().toString(), OrderStatusChangeEventEnum.EVALUATE, orderSnapshotDTO);
+    }
+
+    @Override
+    public String createPaymentIntent(Long orderId, Long userId, BigDecimal amount) {
+        Orders order = queryById(orderId);
+        if (order == null) {
+            throw new ForbiddenOperationException("订单不存在");
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new ForbiddenOperationException("无权操作该订单");
+        }
+        if (OrderPayStatusEnum.PAY_SUCCESS.equals(order.getPayStatus())) {
+            throw new ForbiddenOperationException("订单已支付");
+        }
+        if (order.getRealPayAmount() == null || order.getRealPayAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ForbiddenOperationException("订单金额异常");
+        }
+        // 金额转为分（Stripe 最小单位），1 元 = 100 分
+        long amountFen = order.getRealPayAmount().multiply(BigDecimal.valueOf(100)).longValue();
+        if (amountFen <= 0) {
+            amountFen = 1;
+        }
+        try {
+            PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
+                    .setAmount(amountFen)
+                    .setCurrency("cny")
+                    .putMetadata("orderId", String.valueOf(orderId))
+                    .build();
+            com.stripe.model.PaymentIntent intent = com.stripe.model.PaymentIntent.create(params);
+            return intent.getClientSecret();
+        } catch (StripeException e) {
+            log.error("Stripe create PaymentIntent failed, orderId={}", orderId, e);
+            throw new ForbiddenOperationException("创建支付失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markPaySuccess(Long orderId, Long userId, String transactionId) {
+        Orders order = queryById(orderId);
+        if (order == null) {
+            throw new ForbiddenOperationException("订单不存在");
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new ForbiddenOperationException("无权操作该订单");
+        }
+        if (OrderPayStatusEnum.PAY_SUCCESS.equals(order.getPayStatus())) {
+            return;
+        }
+        LambdaUpdateWrapper<Orders> update = Wrappers.<Orders>lambdaUpdate()
+                .eq(Orders::getId, orderId)
+                .eq(Orders::getUserId, userId)
+                .set(Orders::getPayStatus, OrderPayStatusEnum.PAY_SUCCESS.getStatus())
+                .set(Orders::getPayTime, LocalDateTime.now())
+                .set(Orders::getOrdersStatus, OrderStatusEnum.DISPATCHING.getStatus())
+                .set(Orders::getTransactionId, transactionId)
+                .set(Orders::getTradingChannel, "stripe");
+        update(update);
     }
 
 }

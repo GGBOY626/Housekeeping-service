@@ -55,4 +55,12 @@ public interface ServeMapper extends BaseMapper<Serve> {
      * @return 服务项列表
      */
     List<ServeSimpleResDTO> findListByRegionIdAndServeTypeId(@Param("regionId") Long regionId, @Param("serveTypeId") Long serveTypeId);
+
+    /**
+     * 根据ID查询服务详情
+     *
+     * @param id 服务id
+     * @return 服务详情
+     */
+    ServeAggregationResDTO findServeDetailById(Long id);
 }
