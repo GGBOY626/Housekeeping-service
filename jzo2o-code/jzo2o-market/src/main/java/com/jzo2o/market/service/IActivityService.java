@@ -6,6 +6,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.jzo2o.market.model.dto.request.ActivityQueryForPageReqDTO;
 import com.jzo2o.market.model.dto.request.ActivitySaveReqDTO;
 import com.jzo2o.market.model.dto.response.ActivityInfoResDTO;
+import com.jzo2o.market.model.dto.response.SeizeCouponInfoResDTO;
+
+import java.util.List;
 
 /**
  * <p>
@@ -51,4 +54,17 @@ public interface IActivityService extends IService<Activity> {
      * 定时任务：活动状态到期自动切换
      */
     void updateStatus();
+
+    /**
+     * 活动预热：将满足条件的活动同步到 Redis 供抢券页查询
+     */
+    void preHeat();
+
+    /**
+     * 用户端抢券列表：从缓存查询活动信息
+     *
+     * @param tabType 1 疯抢中 2 即将开始
+     * @return 活动列表
+     */
+    List<SeizeCouponInfoResDTO> queryForListFromCache(Integer tabType);
 }

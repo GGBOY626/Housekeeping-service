@@ -36,4 +36,14 @@ public interface ICouponService extends IService<Coupon> {
      * 定时任务：已领取优惠券自动过期
      */
     void processExpireCoupon();
+
+    /**
+     * 用户端-我的优惠券列表（游标分页）
+     *
+     * @param userId  用户id
+     * @param status  状态 1未使用 2已使用 3已过期，null 表示全部
+     * @param lastId  上一页最后一条id，首次传 null
+     * @return 列表，最多 10 条
+     */
+    List<CouponInfoResDTO> findMyCoupons(Long userId, Integer status, Long lastId);
 }

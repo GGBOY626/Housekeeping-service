@@ -35,12 +35,28 @@
           <div v-for="(item, i) in menuData" :key="i" class="rights">
             <div class="left-line"></div>
             <div class="right">
+              <!-- 首行第一个位置：红包入口 -->
+              <div v-if="i === 0" class="card card-envelope" @click="showCouponModal = true">
+                <img src="/static/LHB.png" alt="" class="envelope-icon" />
+                <span>领券</span>
+              </div>
               <div v-for="(c, k) in item.serveResDTOList" :key="k" class="card" @click="toService(c.id, 2)">
                 <img :src="c.serveItemIcon" />
                 <span>{{ c.serveItemName }}</span>
               </div>
             </div>
           </div>
+        </div>
+      </div>
+      <!-- 领券弹窗 图2 -->
+      <div v-if="showCouponModal" class="modal-mask" @click.self="showCouponModal = false">
+        <div class="modal-coupon">
+          <div class="modal-envelope">
+            <div class="envelope-graphic">¥</div>
+            <div class="envelope-tag">优惠券</div>
+          </div>
+          <button class="modal-btn" @click="toActivityCoupon">立即前往领取优惠券</button>
+          <div class="modal-close" @click="showCouponModal = false">×</div>
         </div>
       </div>
       <div v-if="hotData.length > 0" class="section">
@@ -75,6 +91,7 @@ const city = ref(null)
 const menuData = ref([])
 const hotData = ref([])
 const searchVal = ref('')
+const showCouponModal = ref(false)
 
 onMounted(() => {
   city.value = JSON.parse(localStorage.getItem('city') || 'null')
@@ -107,6 +124,10 @@ const toService = (id, type) => {
 }
 const handleSearch = () => router.push('/search')
 const toMy = () => router.push('/my')
+const toActivityCoupon = () => {
+  showCouponModal.value = false
+  router.push('/activity/coupon')
+}
 </script>
 
 <style scoped>
@@ -262,6 +283,77 @@ const toMy = () => router.push('/my')
   display: block;
   word-break: keep-all;
   overflow-wrap: break-word;
+}
+.card-envelope {
+  cursor: pointer;
+}
+.card-envelope .envelope-icon {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+.modal-coupon {
+  width: 100%;
+  max-width: 320px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px 20px 20px;
+  text-align: center;
+  position: relative;
+}
+.modal-envelope {
+  background: linear-gradient(180deg, #ff6b6b 0%, #e63939 100%);
+  border-radius: 12px;
+  padding: 28px 20px;
+  margin-bottom: 20px;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(230,57,57,0.3);
+}
+.envelope-graphic {
+  font-size: 48px;
+  color: #ffd700;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.envelope-tag {
+  font-size: 14px;
+  color: rgba(255,255,255,0.95);
+  margin-top: 8px;
+}
+.modal-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #fff;
+  background: var(--essential-color-red);
+  border: none;
+  border-radius: 24px;
+  cursor: pointer;
+}
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  font-size: 22px;
+  color: #999;
+  cursor: pointer;
+  border-radius: 50%;
+  background: #f0f0f0;
 }
 .section {
   width: 100%;

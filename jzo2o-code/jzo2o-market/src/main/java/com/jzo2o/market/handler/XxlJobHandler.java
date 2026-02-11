@@ -53,5 +53,16 @@ public class XxlJobHandler {
         }
     }
 
-
+    /**
+     * 活动预热：将满足条件的活动同步到 Redis 供抢券页查询
+     */
+    @XxlJob("activityPreheat")
+    public void activityPreHeat() {
+        log.info("优惠券活动定时预热...");
+        try {
+            activityService.preHeat();
+        } catch (Exception e) {
+            log.error("activityPreHeat error", e);
+        }
+    }
 }

@@ -1,5 +1,6 @@
 package com.jzo2o.market.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.db.DbRuntimeException;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -90,10 +91,30 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
 
     @Override
     public void processExpireCoupon() {
+        // 未使用且有效期已过的优惠券改为已失效
         this.lambdaUpdate()
                 .eq(Coupon::getStatus, CouponStatusEnum.NO_USE.getStatus())
-                .le(Coupon::getValidityTime, DateUtils.now())
+                .le(Coupon::getValidityTime, LocalDateTime.now())
                 .set(Coupon::getStatus, CouponStatusEnum.INVALID.getStatus())
                 .update();
+    }
+
+    @Override
+    public List<CouponInfoResDTO> findMyCoupons(Long userId, Integer status, Long lastId) {
+        if (userId == null) {
+            return new ArrayList<>();
+        }
+        LambdaQueryWrapper<Coupon> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Coupon::getUserId, userId);
+        if (status != null) {
+            wrapper.eq(Coupon::getStatus, status);
+        }
+        wrapper.orderByDesc(Coupon::getCreateTime);
+        if (lastId != null) {
+            wrapper.lt(Coupon::getId, lastId);
+        }
+        wrapper.last("LIMIT 10");
+        List<Coupon> list = this.list(wrapper);
+        return list.stream().map(e -> BeanUtil.copyProperties(e, CouponInfoResDTO.class)).collect(Collectors.toList());
     }
 }

@@ -107,7 +107,7 @@ const toCoupons = () => {
     router.push('/login')
     return
   }
-  alert('我的优惠券功能开发中')
+  router.push('/my/coupon')
 }
 </script>
 
