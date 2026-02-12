@@ -3,6 +3,7 @@ package com.jzo2o.market.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.json.JSONUtil;
+import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -25,8 +26,11 @@ import com.jzo2o.market.service.IActivityService;
 import com.jzo2o.market.service.ICouponService;
 import com.jzo2o.market.service.ICouponWriteOffService;
 import com.jzo2o.mysql.utils.PageUtils;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+
+import java.nio.charset.StandardCharsets;
 import org.springframework.transaction.annotation.Transactional;
 
 import cn.hutool.json.JSONArray;
@@ -42,6 +46,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.jzo2o.market.constants.RedisConstants.RedisKey.ACTIVITY_CACHE_LIST;
+import static com.jzo2o.market.constants.RedisConstants.RedisKey.COUPON_RESOURCE_STOCK;
 import static com.jzo2o.market.enums.ActivityStatusEnum.*;
 
 /**
@@ -173,6 +178,35 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
                 .collect(Collectors.toList());
         String jsonStr = JSONUtil.toJsonStr(dtoList);
         redisTemplate.opsForValue().set(ACTIVITY_CACHE_LIST, jsonStr);
+        //4. 将优惠券活动的库存从MySQL同步到Redis（key/field/value 均用纯字符串，Lua 中 tonumber/HINCRBY 才能正确识别）
+        list.stream().filter(e ->
+                getStatus(e.getDistributeStartTime(), e.getDistributeEndTime(), e.getStatus()) == NO_DISTRIBUTE.getStatus()
+        ).forEach(e -> syncStockToRedis(String.format(COUPON_RESOURCE_STOCK, e.getId() % 10), e.getId().toString(), e.getStockNum(), false));
+
+        list.stream().filter(e ->
+                getStatus(e.getDistributeStartTime(), e.getDistributeEndTime(), e.getStatus()) == DISTRIBUTING.getStatus()
+        ).forEach(e ->
+                syncStockToRedis(String.format(COUPON_RESOURCE_STOCK, e.getId() % 10), e.getId().toString(), e.getStockNum(), true)
+        );
+    }
+
+    /** 将活动库存以纯字符串写入 Redis，供 Lua 脚本 tonumber/HINCRBY 使用 */
+    private void syncStockToRedis(String redisKey, String activityIdStr, Integer stockNum, boolean onlyIfAbsent) {
+        if (stockNum == null) {
+            return;
+        }
+        String value = String.valueOf(stockNum);
+        redisTemplate.execute((RedisCallback<Void>) conn -> {
+            byte[] key = redisKey.getBytes(StandardCharsets.UTF_8);
+            byte[] field = activityIdStr.getBytes(StandardCharsets.UTF_8);
+            byte[] val = value.getBytes(StandardCharsets.UTF_8);
+            if (onlyIfAbsent) {
+                conn.hSetNX(key, field, val);
+            } else {
+                conn.hSet(key, field, val);
+            }
+            return null;
+        });
     }
 
     @Override
@@ -245,5 +279,24 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityMapper, Activity> i
             return NO_DISTRIBUTE.getStatus();
         }
         return status;
+    }
+    @Override
+    public ActivityInfoResDTO getActivityInfoByIdFromCache(Long id) {
+        //1. 缓存中获取活动信息
+        String jsonString = (String) redisTemplate.opsForValue().get(ACTIVITY_CACHE_LIST);
+        if (StringUtils.isEmpty(jsonString)) {
+            return null;
+        }
+
+        //2. 字符串转换为集合
+        List<ActivityInfoResDTO> activityInfoResDTOList = JSON.parseArray(jsonString, ActivityInfoResDTO.class);
+        if (CollUtil.isEmpty(activityInfoResDTOList)) {
+            return null;
+        }
+
+        //3. 过滤出指定id的活动
+        return activityInfoResDTOList.stream()
+                .filter(e -> e.getId().equals(id))
+                .findFirst().orElse(null);
     }
 }

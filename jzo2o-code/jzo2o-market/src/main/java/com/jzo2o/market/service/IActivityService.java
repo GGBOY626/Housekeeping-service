@@ -67,4 +67,12 @@ public interface IActivityService extends IService<Activity> {
      * @return 活动列表
      */
     List<SeizeCouponInfoResDTO> queryForListFromCache(Integer tabType);
+
+    /**
+     * 从缓存中获取活动信息
+     *
+     * @param id 活动id
+     * @return 活动信息
+     */
+    ActivityInfoResDTO getActivityInfoByIdFromCache(Long id);
 }

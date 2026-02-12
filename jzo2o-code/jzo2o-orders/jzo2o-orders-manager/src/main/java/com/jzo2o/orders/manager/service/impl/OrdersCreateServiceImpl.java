@@ -6,6 +6,10 @@ import com.jzo2o.api.customer.AddressBookApi;
 import com.jzo2o.api.customer.dto.response.AddressBookResDTO;
 import com.jzo2o.api.foundations.ServeApi;
 import com.jzo2o.api.foundations.dto.response.ServeAggregationResDTO;
+import com.jzo2o.api.market.CouponApi;
+import com.jzo2o.api.market.dto.request.CouponUseReqDTO;
+import com.jzo2o.api.market.dto.response.AvailableCouponsResDTO;
+import com.jzo2o.api.market.dto.response.CouponUseResDTO;
 import com.jzo2o.common.expcetions.ForbiddenOperationException;
 import com.jzo2o.common.utils.DateUtils;
 import com.jzo2o.mvc.utils.UserContext;
@@ -16,6 +20,7 @@ import com.jzo2o.orders.manager.model.dto.request.PlaceOrderReqDTO;
 import com.jzo2o.orders.manager.model.dto.response.PlaceOrderResDTO;
 import com.jzo2o.orders.manager.service.IOrdersCreateService;
 import com.jzo2o.redis.annotations.Lock;
+import io.seata.spring.annotation.GlobalTransactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -25,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 
 /**
  * <p>
@@ -48,11 +54,24 @@ public class OrdersCreateServiceImpl extends ServiceImpl<OrdersMapper, Orders> i
     private AddressBookApi addressBookApi;
 
     @Autowired
+    private CouponApi couponApi;
+
+    @Autowired
     private IOrdersCreateService owner;
 
     @Override
     public PlaceOrderResDTO placeOrder(PlaceOrderReqDTO placeOrderReqDTO) {
         return owner.placeOrder(UserContext.currentUserId(), placeOrderReqDTO);
+    }
+
+    @Override
+    public List<AvailableCouponsResDTO> getAvailableCoupons(Long serveId, Integer purNum) {
+        ServeAggregationResDTO serveResDTO = serveApi.findById(serveId);
+        if (serveResDTO == null || serveResDTO.getSaleStatus() != 2) {
+            throw new ForbiddenOperationException("服务不可用");
+        }
+        BigDecimal totalAmount = serveResDTO.getPrice().multiply(new BigDecimal(purNum));
+        return couponApi.getAvailable(totalAmount);
     }
 
     @Lock(formatter = "ORDERS:CREATE:LOCK:#{userId}:#{placeOrderReqDTO.serveId}", time = 30, waitTime = 1, unlock = false)
@@ -105,18 +124,38 @@ public class OrdersCreateServiceImpl extends ServiceImpl<OrdersMapper, Orders> i
         long sortBy = placeOrderReqDTO.getServeStartTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() + orders.getId() % 100000;
         orders.setSortBy(sortBy);
 
-        // 4. 保存（通过代理调用，使 saveOrders 上的 @Transactional 生效，避免同类内部调用导致事务失效）
-        owner.saveOrders(orders);
+        // 4. 保存订单（有优惠券则先核销再落库，无则直接落库）
+        if (placeOrderReqDTO.getCouponId() != null && placeOrderReqDTO.getCouponId() > 0) {
+            owner.saveOrdersWithCoupon(orders, placeOrderReqDTO.getCouponId());
+        } else {
+            owner.saveOrders(orders);
+        }
 
-        // 5. 返回
-        return new PlaceOrderResDTO(orders.getId());
+        // 5. 返回（含实付金额，前端用于支付页展示与发起支付）
+        return new PlaceOrderResDTO(orders.getId(), orders.getRealPayAmount());
     }
 
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void saveOrders(Orders orders) {
         this.save(orders);
-        // 模拟异常测试事务回滚时可取消注释：int i = 1 / 0;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    @GlobalTransactional
+    public void saveOrdersWithCoupon(Orders orders, Long couponId) {
+        CouponUseReqDTO couponUseReqDTO = new CouponUseReqDTO();
+        couponUseReqDTO.setId(couponId);
+        couponUseReqDTO.setOrdersId(orders.getId());
+        couponUseReqDTO.setTotalAmount(orders.getTotalAmount());
+        CouponUseResDTO couponUseResDTO = couponApi.use(couponUseReqDTO);
+
+        BigDecimal discountAmount = couponUseResDTO.getDiscountAmount();
+        orders.setDiscountAmount(discountAmount);
+        orders.setRealPayAmount(orders.getTotalAmount().subtract(discountAmount));
+
+        this.save(orders);
     }
 
     /**

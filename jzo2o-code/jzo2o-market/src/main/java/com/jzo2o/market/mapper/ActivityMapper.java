@@ -2,6 +2,7 @@ package com.jzo2o.market.mapper;
 
 import com.jzo2o.market.model.domain.Activity;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Update;
 
 /**
  * <p>
@@ -13,4 +14,12 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  */
 public interface ActivityMapper extends BaseMapper<Activity> {
 
+    /**
+     * 扣减库存
+     *
+     * @param id 活动 id
+     * @return 更新行数，0 表示库存不足或活动不存在
+     */
+    @Update("update activity set stock_num = stock_num - 1 where id = #{id} and stock_num > 0")
+    int deductStock(long id);
 }

@@ -30,16 +30,12 @@ public class CouponUtils {
                 return BigDecimal.ZERO;
             }
             return discountAmount;
-        } else {//折扣优惠 取订单金额 *（1-折扣率）
-            //折扣率
+        } else {
+            // 折扣优惠：优惠金额 = 订单金额 × 折扣率/100（折扣率 6 表示省 6%，即实付 94%）
             Integer discountRate = coupon.getDiscountRate();
-            //折扣率非法
-            if(discountRate>=100 || discountRate<=0)  return BigDecimal.ZERO;
-            //优惠率
-            BigDecimal rate = new BigDecimal(100 - coupon.getDiscountRate()).divide(new BigDecimal(100), 2, RoundingMode.DOWN);
-            //优惠金额
-            BigDecimal discountAmount = totalAmount.multiply(rate);
-            return  discountAmount;
+            if (discountRate >= 100 || discountRate <= 0) return BigDecimal.ZERO;
+            BigDecimal rate = new BigDecimal(discountRate).divide(new BigDecimal(100), 4, RoundingMode.HALF_UP);
+            return totalAmount.multiply(rate).setScale(2, RoundingMode.HALF_UP);
         }
     }
 }

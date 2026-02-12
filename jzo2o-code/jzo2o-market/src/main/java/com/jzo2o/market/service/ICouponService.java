@@ -46,4 +46,45 @@ public interface ICouponService extends IService<Coupon> {
      * @return 列表，最多 10 条
      */
     List<CouponInfoResDTO> findMyCoupons(Long userId, Integer status, Long lastId);
+
+
+    /**
+     * 我的优惠券列表
+     *
+     * @param lastId 最后一个优惠券id
+     * @param userId 用户id
+     * @param status 状态
+     * @return 优惠券列表
+     */
+    List<CouponInfoResDTO> queryForList(Long lastId, Long userId, Integer status);
+
+    /**
+     * 获取可用优惠券列表（当前用户、未使用、有效期内、满足满减条件、优惠金额小于订单金额，按优惠金额从大到小排序）
+     *
+     * @param totalAmount 订单总金额
+     * @return 可用的优惠券列表
+     */
+    List<AvailableCouponsResDTO> getAvailable(BigDecimal totalAmount);
+
+    /**
+     * 核销优惠券
+     *
+     * @param couponUseReqDTO 优惠券使用请求（优惠券id、订单id、订单总金额）
+     * @return 实际优惠金额
+     */
+    CouponUseResDTO use(CouponUseReqDTO couponUseReqDTO);
+
+    /**
+     * 退回优惠券
+     *
+     * @param couponUseBackReqDTO 优惠券
+     */
+    void useBack(CouponUseBackReqDTO couponUseBackReqDTO);
+
+    /**
+     * 抢券（活动id）
+     *
+     * @param activityId 活动id
+     */
+    void seize(Long activityId);
 }

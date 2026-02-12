@@ -6,6 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 /**
  * @author itcast
  */
@@ -16,4 +18,7 @@ import lombok.NoArgsConstructor;
 public class PlaceOrderResDTO {
     @ApiModelProperty("订单id")
     private Long id;
+
+    @ApiModelProperty("实付金额（订单总价-优惠券抵扣），支付页应以此金额发起支付")
+    private BigDecimal realPayAmount;
 }

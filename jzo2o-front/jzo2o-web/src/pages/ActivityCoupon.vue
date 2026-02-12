@@ -30,10 +30,10 @@
           <div
             v-if="tabType === 1"
             class="btn"
-            :class="{ disabled: !item.remainNum }"
-            @click.stop="tabType === 1 && item.remainNum ? claimCoupon(item.id) : null"
+            :class="{ disabled: !item.remainNum || claimedActivityIds.has(item.id), received: claimedActivityIds.has(item.id) }"
+            @click.stop="tabType === 1 && item.remainNum && !claimedActivityIds.has(item.id) ? claimCoupon(item.id) : null"
           >
-            {{ item.remainNum > 0 ? '立即领取' : '已抢光' }}
+            {{ claimedActivityIds.has(item.id) ? '已领取' : (item.remainNum > 0 ? '立即领取' : '已抢光') }}
           </div>
         </div>
         <div class="card-right">
@@ -50,6 +50,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getActivityList } from '@/api/activity'
+import { getMyCouponList, seizeCoupon } from '@/api/coupon'
 
 const route = useRoute()
 const tabs = [
@@ -59,6 +60,8 @@ const tabs = [
 const tabType = ref(route.query.tabType !== undefined ? Number(route.query.tabType) : 1)
 const list = ref([])
 const loading = ref(false)
+/** 当前用户已领取的活动 id 集合（来自「我的优惠券」+ 本次领取） */
+const claimedActivityIds = ref(new Set())
 
 function displayValue(item) {
   if (item.type === 1 && item.discountAmount != null) {
@@ -99,11 +102,26 @@ function formatRange(start, end) {
   return s && e ? `${s}~${e}` : s || e
 }
 
+async function loadClaimedActivityIds() {
+  try {
+    const res = await getMyCouponList({})
+    const arr = Array.isArray(res) ? res : (res?.data ?? res?.records ?? [])
+    const fromApi = arr.map((c) => c.activityId).filter(Boolean)
+    // 与当前集合合并，避免刚领取的券尚未同步到「我的优惠券」时被覆盖
+    claimedActivityIds.value = new Set([...claimedActivityIds.value, ...fromApi])
+  } catch (e) {
+    // 失败时保留已有集合，不清空
+  }
+}
+
 async function loadList() {
   loading.value = true
   try {
-    const res = await getActivityList({ tabType: tabType.value })
-    const data = Array.isArray(res) ? res : (res?.data ?? res?.records ?? [])
+    const [listRes] = await Promise.all([
+      getActivityList({ tabType: tabType.value }),
+      loadClaimedActivityIds()
+    ])
+    const data = Array.isArray(listRes) ? listRes : (listRes?.data ?? listRes?.records ?? [])
     list.value = data
   } catch (e) {
     list.value = []
@@ -112,9 +130,15 @@ async function loadList() {
   }
 }
 
-function claimCoupon(activityId) {
-  // 抢券接口若存在可在此调用；当前仅跳转展示，后续可对接 POST /market/consumer/coupon/seize
-  alert('抢券功能需对接抢券接口')
+async function claimCoupon(activityId) {
+  try {
+    await seizeCoupon({ id: activityId })
+    claimedActivityIds.value = new Set([...claimedActivityIds.value, activityId])
+    alert('领取成功')
+    loadList()
+  } catch (e) {
+    loadList()
+  }
 }
 
 onMounted(() => {
@@ -225,6 +249,11 @@ watch(() => route.query.tabType, (v) => {
   color: #fff;
   cursor: not-allowed;
   pointer-events: none;
+}
+.btn.received {
+  background: #b0b0b0;
+  color: #fff;
+  cursor: default;
 }
 .card-right {
   flex: 1;

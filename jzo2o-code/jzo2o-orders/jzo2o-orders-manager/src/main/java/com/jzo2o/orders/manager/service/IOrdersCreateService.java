@@ -52,4 +52,21 @@ public interface IOrdersCreateService extends IService<Orders> {
      * @param orders 订单
      */
     void saveOrders(Orders orders);
+
+    /**
+     * 保存订单（带优惠券）：先核销优惠券，再设置订单优惠金额与实付金额，最后保存订单
+     *
+     * @param orders   订单信息
+     * @param couponId 优惠券 id
+     */
+    void saveOrdersWithCoupon(Orders orders, Long couponId);
+
+    /**
+     * 获取可用优惠券
+     *
+     * @param serveId 服务项目 id
+     * @param purNum  购买数量
+     * @return 可用优惠券列表
+     */
+    List<AvailableCouponsResDTO> getAvailableCoupons(Long serveId, Integer purNum);
 }

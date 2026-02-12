@@ -8,6 +8,8 @@ import com.baomidou.mybatisplus.core.metadata.OrderItem;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.jzo2o.api.market.CouponApi;
+import com.jzo2o.api.market.dto.request.CouponUseBackReqDTO;
 import com.jzo2o.api.orders.dto.response.OrderResDTO;
 import com.jzo2o.api.orders.dto.response.OrderSimpleResDTO;
 import com.jzo2o.common.enums.EnableStatusEnum;
@@ -68,6 +70,9 @@ public class OrdersManagerServiceImpl extends ServiceImpl<OrdersMapper, Orders> 
 
     @Autowired
     private OrdersRefundMapper ordersRefundMapper;
+
+    @Autowired
+    private CouponApi couponApi;
 
     @PostConstruct
     public void initStripe() {
@@ -211,6 +216,13 @@ public class OrdersManagerServiceImpl extends ServiceImpl<OrdersMapper, Orders> 
         Orders orders = getById(orderCancelDTO.getId());
         if (ObjectUtil.isNull(orders)) {
             throw new ForbiddenOperationException("订单不存在");
+        }
+        // 若订单使用了优惠券，先退回优惠券
+        if (orders.getDiscountAmount() != null && orders.getDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+            CouponUseBackReqDTO couponUseBackReqDTO = new CouponUseBackReqDTO();
+            couponUseBackReqDTO.setOrdersId(orders.getId());
+            couponUseBackReqDTO.setUserId(orders.getUserId());
+            couponApi.useBack(couponUseBackReqDTO);
         }
         BeanUtil.copyProperties(orders, orderCancelDTO);
         if (!orders.getUserId().equals(orderCancelDTO.getCurrentUserId())) {

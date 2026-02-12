@@ -111,17 +111,48 @@
                   </div>
                 </div>
                 <div class="form-title">优惠券信息</div>
-                <div class="form-row">
+                <div
+                  class="form-row"
+                  :class="{ clickable: availableCoupons.length > 0 }"
+                  @click="availableCoupons.length > 0 && (showCouponPicker = true)"
+                >
                   <div class="form-left">
                     <img src="/static/yhqtb@2x.png" class="form-icon" alt="" />
                     <span>优惠券</span>
                   </div>
-                  <span class="form-value gray">暂无可用</span>
+                  <span v-if="selectedCoupon" class="form-value highlight">-¥{{ couponDiscount }}</span>
+                  <span v-else-if="availableCoupons.length > 0" class="form-value">{{ availableCoupons.length }}张可用</span>
+                  <span v-else class="form-value gray">暂无可用</span>
                   <span class="form-arrow">›</span>
+                </div>
+                <!-- 优惠券选择弹层 -->
+                <div v-if="showCouponPicker" class="time-picker-mask" @click.self="showCouponPicker = false">
+                  <div class="time-picker-panel coupon-panel">
+                    <div class="time-picker-header">
+                      <span @click="showCouponPicker = false">取消</span>
+                      <span>选择优惠券</span>
+                      <span class="confirm" @click="showCouponPicker = false">确定</span>
+                    </div>
+                    <div class="time-picker-body coupon-list">
+                      <div class="coupon-item none" @click="selectedCoupon = null; showCouponPicker = false">
+                        不使用优惠券
+                      </div>
+                      <div
+                        v-for="c in availableCoupons"
+                        :key="c.id"
+                        class="coupon-item"
+                        :class="{ active: selectedCoupon?.id === c.id }"
+                        @click="selectedCoupon = c; showCouponPicker = false"
+                      >
+                        <span class="coupon-desc">{{ c.name || '优惠券' }}</span>
+                        <span class="coupon-discount">-¥{{ c.discountAmount || 0 }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="modal-foot">
-                <span class="foot-price">¥{{ totalPrice }}</span>
+                <span class="foot-price">¥{{ modalDisplayTotal }}</span>
                 <button
                   class="foot-btn"
                   :class="{ disabled: !canSubmit }"
@@ -140,10 +171,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getServeById, placeOrder } from '@/api/service'
 import { getDefaultAddress, getAddressBookDetail } from '@/api/address'
+import { getAvailableCoupons } from '@/api/coupon'
 import { UNIT } from '@/utils/constants'
 
 const route = useRoute()
@@ -157,6 +189,9 @@ const serveStartTime = ref(null)
 const showTimePicker = ref(false)
 const selectedDateIdx = ref(0)
 const selectedTimeIdx = ref(0)
+const availableCoupons = ref([])
+const selectedCoupon = ref(null)
+const showCouponPicker = ref(false)
 // 近7天日期
 const pickerDateList = computed(() => {
   const list = []
@@ -201,6 +236,24 @@ const totalPrice = computed(() => {
   return price % 1 === 0 ? price : price.toFixed(2)
 })
 
+/** 当前选中优惠券在本单的抵扣金额（满减取券面额，折扣按当前订单总价×折扣率） */
+const couponDiscount = computed(() => {
+  const c = selectedCoupon.value
+  if (!c) return 0
+  const total = Number(totalPrice.value)
+  if (c.type === 1) return Number(c.discountAmount || 0)
+  if (c.type === 2 && c.discountRate != null) return Math.round(total * Number(c.discountRate) / 100 * 100) / 100
+  return 0
+})
+
+/** 弹窗内展示的应付金额（原价 - 券抵扣） */
+const modalDisplayTotal = computed(() => {
+  const total = Number(totalPrice.value)
+  const discount = Number(couponDiscount.value)
+  const pay = Math.max(0, total - discount)
+  return pay % 1 === 0 ? pay : pay.toFixed(2)
+})
+
 const canSubmit = computed(() => {
   return addressData.value?.id && toDoorTimeLabel.value
 })
@@ -242,14 +295,32 @@ const loadDefaultAddress = async () => {
   }
 }
 
+const loadAvailableCoupons = async () => {
+  const serveId = route.params.id
+  if (!serveId || !num.value) return
+  try {
+    const res = await getAvailableCoupons({ serveId, purNum: num.value })
+    availableCoupons.value = Array.isArray(res) ? res : (res?.data ?? res ?? [])
+    selectedCoupon.value = null
+  } catch (e) {
+    console.error(e)
+    availableCoupons.value = []
+  }
+}
+
 const handleBook = async () => {
   showBookModal.value = true
   await loadDefaultAddress()
+  await loadAvailableCoupons()
 }
 
 const closeModal = () => {
   showBookModal.value = false
 }
+
+watch([() => num.value, showBookModal], () => {
+  if (showBookModal.value && route.params.id) loadAvailableCoupons()
+})
 
 const toAddressSelect = () => {
   router.push(`/address?fromDetail=true&detailId=${route.params.id}`)
@@ -263,12 +334,16 @@ const handleSubmit = async () => {
       serveId: route.params.id,
       addressBookId: addressData.value.id,
       serveStartTime: serveStartTime.value,
-      purNum: num.value
+      purNum: num.value,
+      couponId: selectedCoupon.value?.id ?? null
     })
-    const orderId = res?.data?.id ?? res?.id
+    const data = res?.data ?? res
+    const orderId = data?.id ?? res?.id
+    // 使用后端返回的实付金额（已扣优惠券），避免支付金额与订单不一致
+    const payAmount = data?.realPayAmount != null ? Number(data.realPayAmount) : totalPrice.value
     if (orderId) {
       closeModal()
-      router.push(`/order/pay?id=${orderId}&amount=${totalPrice.value}`)
+      router.push(`/order/pay?id=${orderId}&amount=${payAmount}`)
     } else {
       alert(res?.msg || '下单失败')
     }
@@ -512,6 +587,9 @@ const handleSubmit = async () => {
   align-items: center;
   padding: 14px 0;
   border-bottom: 1px solid #f4f4f4;
+  cursor: default;
+}
+.form-row.clickable {
   cursor: pointer;
 }
 .form-row.address-row {
@@ -559,6 +637,10 @@ const handleSubmit = async () => {
 .form-value.placeholder {
   color: #888;
 }
+.form-value.highlight {
+  color: var(--essential-color-red);
+  font-weight: 500;
+}
 /* 上门时间选择弹层 */
 .time-picker-mask {
   position: fixed;
@@ -592,6 +674,31 @@ const handleSubmit = async () => {
 .time-picker-header .confirm {
   color: var(--essential-color-red);
   cursor: pointer;
+}
+.coupon-list {
+  padding: 12px;
+  overflow-y: auto;
+  max-height: 50vh;
+}
+.coupon-item {
+  padding: 14px 12px;
+  border-bottom: 1px solid #f4f4f4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-size: 14px;
+}
+.coupon-item.none {
+  color: #888;
+}
+.coupon-item.active {
+  background: #fff8f8;
+  color: var(--essential-color-red);
+}
+.coupon-discount {
+  color: var(--essential-color-red);
+  font-weight: 500;
 }
 .time-picker-body {
   display: flex;

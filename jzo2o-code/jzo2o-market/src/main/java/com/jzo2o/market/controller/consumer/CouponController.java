@@ -1,16 +1,13 @@
 package com.jzo2o.market.controller.consumer;
 
-import com.jzo2o.common.expcetions.ForbiddenOperationException;
+import com.jzo2o.api.market.dto.request.CouponUseBackReqDTO;
 import com.jzo2o.market.model.dto.response.CouponInfoResDTO;
 import com.jzo2o.market.service.ICouponService;
 import com.jzo2o.mvc.utils.UserContext;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -22,15 +19,23 @@ public class CouponController {
     @Autowired
     private ICouponService couponService;
 
-    @ApiOperation("我的优惠券列表（查 DB 用户已领取的优惠券，不走 Redis）")
+
+
+
+    @ApiOperation("查询我的优惠券列表")
     @GetMapping("/my")
-    public List<CouponInfoResDTO> myList(
-            @RequestParam(required = false) Integer status,
-            @RequestParam(required = false) Long lastId) {
-        Long userId = UserContext.currentUserId();
-        if (userId == null) {
-            throw new ForbiddenOperationException("请先登录");
-        }
-        return couponService.findMyCoupons(userId, status, lastId);
+    public List<CouponInfoResDTO> queryMyCouponForPage(Long lastId, Integer status) {
+        return couponService.queryForList(lastId, UserContext.currentUserId(), status);
+    }
+    @PostMapping("/useBack")
+    @ApiOperation("退回优惠券")
+    public void useBack(@RequestBody CouponUseBackReqDTO couponUseBackReqDTO) {
+        couponService.useBack(couponUseBackReqDTO);
+    }
+
+    @PostMapping("/seize")
+    @ApiOperation("抢券")
+    public void seize(@RequestParam("id") Long activityId) {
+        couponService.seize(activityId);
     }
 }

@@ -98,6 +98,13 @@ public class ConsumerOrdersController {
                 orderId, UserContext.currentUserId(), req.getPaymentIntentId());
     }
 
+    @ApiOperation("获取可用优惠券")
+    @GetMapping("/getAvailableCoupons")
+    public List<AvailableCouponsResDTO> getAvailableCoupons(@RequestParam("serveId") Long serveId,
+                                                            @RequestParam("purNum") Integer purNum) {
+        return ordersCreateService.getAvailableCoupons(serveId, purNum);
+    }
+
     @ApiOperation("取消订单")
     @PutMapping("/cancel")
     public void cancel(@RequestBody CancelOrderReqDTO req) {

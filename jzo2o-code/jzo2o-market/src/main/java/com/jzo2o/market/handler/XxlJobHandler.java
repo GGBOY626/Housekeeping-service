@@ -2,7 +2,6 @@ package com.jzo2o.market.handler;
 
 import com.jzo2o.market.service.IActivityService;
 import com.jzo2o.market.service.ICouponService;
-import com.jzo2o.redis.annotations.Lock;
 import com.jzo2o.redis.constants.RedisSyncQueueConstants;
 import com.jzo2o.redis.sync.SyncManager;
 import com.xxl.job.core.handler.annotation.XxlJob;
@@ -10,8 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
+import java.util.concurrent.ThreadPoolExecutor;
 
-import static com.jzo2o.market.constants.RedisConstants.Formatter.*;
 import static com.jzo2o.market.constants.RedisConstants.RedisKey.COUPON_SEIZE_SYNC_QUEUE_NAME;
 
 @Component
@@ -26,6 +25,9 @@ public class XxlJobHandler {
 
     @Resource
     private ICouponService couponService;
+
+    @Resource(name = "syncThreadPool")
+    private ThreadPoolExecutor threadPoolExecutor;
 
     /**
      * 活动状态到期变更任务：待生效→进行中、待生效/进行中→已失效
@@ -63,6 +65,24 @@ public class XxlJobHandler {
             activityService.preHeat();
         } catch (Exception e) {
             log.error("activityPreHeat error", e);
+        }
+    }
+
+    /**
+     * 抢券同步任务：从 Redis 同步队列消费抢券记录，落库优惠券表并扣减活动库存
+     */
+    @XxlJob("seizeCouponSyncJob")
+    public void seizeCouponSyncJob() {
+        log.info("抢券同步队列任务开始...");
+        try {
+            syncManager.start(
+                    COUPON_SEIZE_SYNC_QUEUE_NAME,
+                    RedisSyncQueueConstants.STORAGE_TYPE_HASH,
+                    RedisSyncQueueConstants.MODE_SINGLE,
+                    threadPoolExecutor
+            );
+        } catch (Exception e) {
+            log.error("seizeCouponSyncJob error", e);
         }
     }
 }

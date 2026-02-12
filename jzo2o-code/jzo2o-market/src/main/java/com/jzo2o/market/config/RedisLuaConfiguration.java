@@ -19,11 +19,11 @@ import java.util.Objects;
 public class RedisLuaConfiguration {
 
     @Bean("seizeCouponScript")
-    public DefaultRedisScript<Integer> seizeCouponScript() {
-        DefaultRedisScript<Integer> redisScript = new DefaultRedisScript<>();
+    public DefaultRedisScript<String> seizeCouponScript() {
+        DefaultRedisScript<String> redisScript = new DefaultRedisScript<>();
         //resource目录下的scripts文件下的seizeCouponScript.lua文件
         redisScript.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/seizeCouponScript.lua")));
-        redisScript.setResultType(Integer.class);
+        redisScript.setResultType(String.class);
         return redisScript;
     }
 
