@@ -43,7 +43,7 @@
           </button>
         </view>
         <div class="gentleReminder">
-          仅用于IT培训教学使用，为保障您的个人信息安全，请勿向平台录入任何个人敏感信息（如手机号、身份证号等）！
+          ray project
         </div>
         <!-- end -->
         <!-- 更新请求Url - 教学需求 -->
